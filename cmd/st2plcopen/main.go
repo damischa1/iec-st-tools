@@ -1003,6 +1003,10 @@ func main() {
 		os.Exit(1)
 	}
 	defer f.Close()
+
+	// Write UTF-8 BOM (required by CoDeSys 3.5)
+	f.Write([]byte{0xEF, 0xBB, 0xBF})
+
 	w := newCRLFWriter(f)
 	defer w.Flush()
 
