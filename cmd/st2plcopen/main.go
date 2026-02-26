@@ -27,14 +27,46 @@
 package main
 
 import (
+	"bufio"
 	"crypto/rand"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 )
+
+// crlfWriter wraps an io.Writer and converts \n to \r\n.
+type crlfWriter struct {
+	w *bufio.Writer
+}
+
+func newCRLFWriter(f *os.File) *crlfWriter {
+	return &crlfWriter{w: bufio.NewWriter(f)}
+}
+
+func (c *crlfWriter) Write(p []byte) (int, error) {
+	written := 0
+	for _, b := range p {
+		if b == '\n' {
+			if _, err := c.w.Write([]byte{'\r', '\n'}); err != nil {
+				return written, err
+			}
+		} else {
+			if err := c.w.WriteByte(b); err != nil {
+				return written, err
+			}
+		}
+		written++
+	}
+	return written, nil
+}
+
+func (c *crlfWriter) Flush() error {
+	return c.w.Flush()
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -120,7 +152,7 @@ var simpleIECTypes = map[string]bool{
 	"WSTRING": true,
 }
 
-func writeTypeXML(w *os.File, indent, typeName string) {
+func writeTypeXML(w io.Writer, indent, typeName string) {
 	upper := strings.ToUpper(strings.TrimSpace(typeName))
 
 	// Simple IEC types → empty element
@@ -627,11 +659,11 @@ func splitEnumLine(line string) []enumVal {
 
 // ── XML writing ──────────────────────────────────────────────────────────────
 
-func writeXHTMLContent(w *os.File, indent, text string) {
+func writeXHTMLContent(w io.Writer, indent, text string) {
 	fmt.Fprintf(w, "%s<xhtml xmlns=\"http://www.w3.org/1999/xhtml\">%s</xhtml>\n", indent, xmlEscape(text))
 }
 
-func writeVariable(w *os.File, indent string, v varInfo) {
+func writeVariable(w io.Writer, indent string, v varInfo) {
 	if v.address != "" {
 		fmt.Fprintf(w, "%s<variable name=\"%s\" address=\"%s\">\n", indent, xmlEscape(v.name), xmlEscape(v.address))
 	} else {
@@ -653,7 +685,7 @@ func writeVariable(w *os.File, indent string, v varInfo) {
 	fmt.Fprintf(w, "%s</variable>\n", indent)
 }
 
-func writeVarList(w *os.File, indent, tag string, vars []varInfo) {
+func writeVarList(w io.Writer, indent, tag string, vars []varInfo) {
 	if len(vars) == 0 {
 		return
 	}
@@ -664,7 +696,7 @@ func writeVarList(w *os.File, indent, tag string, vars []varInfo) {
 	fmt.Fprintf(w, "%s</%s>\n", indent, tag)
 }
 
-func writeObjectIdAddData(w *os.File, indent, objectID string) {
+func writeObjectIdAddData(w io.Writer, indent, objectID string) {
 	fmt.Fprintf(w, "%s<addData>\n", indent)
 	fmt.Fprintf(w, "%s  <data name=\"http://www.3s-software.com/plcopenxml/objectid\" handleUnknown=\"discard\">\n", indent)
 	fmt.Fprintf(w, "%s    <ObjectId>%s</ObjectId>\n", indent, objectID)
@@ -672,7 +704,7 @@ func writeObjectIdAddData(w *os.File, indent, objectID string) {
 	fmt.Fprintf(w, "%s</addData>\n", indent)
 }
 
-func writePOU(w *os.File, obj *stObject) {
+func writePOU(w io.Writer, obj *stObject) {
 	// Determine pouType string
 	pouType := "program"
 	switch obj.kind {
@@ -733,7 +765,7 @@ func writePOU(w *os.File, obj *stObject) {
 	fmt.Fprintf(w, "      </pou>\n")
 }
 
-func writeDataType(w *os.File, d dutInfo) {
+func writeDataType(w io.Writer, d dutInfo) {
 	fmt.Fprintf(w, "      <dataType name=\"%s\">\n", xmlEscape(d.name))
 
 	switch d.typeName {
@@ -752,9 +784,7 @@ func writeDataType(w *os.File, d dutInfo) {
 		fmt.Fprintf(w, "            <values>\n")
 		for _, ev := range d.enumVals {
 			if ev.value != "" {
-				fmt.Fprintf(w, "              <value name=\"%s\">\n", xmlEscape(ev.name))
-				fmt.Fprintf(w, "                <simpleValue value=\"%s\" />\n", xmlEscape(ev.value))
-				fmt.Fprintf(w, "              </value>\n")
+				fmt.Fprintf(w, "              <value name=\"%s\" value=\"%s\" />\n", xmlEscape(ev.name), xmlEscape(ev.value))
 			} else {
 				fmt.Fprintf(w, "              <value name=\"%s\" />\n", xmlEscape(ev.name))
 			}
@@ -772,7 +802,7 @@ func writeDataType(w *os.File, d dutInfo) {
 	fmt.Fprintf(w, "      </dataType>\n")
 }
 
-func writeGlobalVarsAddData(w *os.File, obj *stObject) {
+func writeGlobalVarsAddData(w io.Writer, obj *stObject) {
 	blocks := parseVarBlocks(obj.decl)
 	fmt.Fprintf(w, "    <data name=\"http://www.3s-software.com/plcopenxml/globalvars\" handleUnknown=\"implementation\">\n")
 	fmt.Fprintf(w, "      <globalVars name=\"%s\">\n", xmlEscape(obj.name))
@@ -862,7 +892,7 @@ func ensureProjPath(root *projFolder, parts []string) *projFolder {
 	return cur
 }
 
-func writeProjStructure(w *os.File, f *projFolder, indent string) {
+func writeProjStructure(w io.Writer, f *projFolder, indent string) {
 	for _, name := range sortedKeys(f.children) {
 		child := f.children[name]
 		fmt.Fprintf(w, "%s<Folder Name=\"%s\">\n", indent, xmlEscape(child.name))
@@ -967,12 +997,14 @@ func main() {
 	}
 
 	outFile := filepath.Join(*outDir, *outName+".xml")
-	w, err := os.Create(outFile)
+	f, err := os.Create(outFile)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "cannot create output file:", err)
 		os.Exit(1)
 	}
-	defer w.Close()
+	defer f.Close()
+	w := newCRLFWriter(f)
+	defer w.Flush()
 
 	ts := nowISO()
 
