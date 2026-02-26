@@ -1,0 +1,5 @@
+CONFIGURATION Globals
+    VAR_GLOBAL
+        G_SafeInvertTest : INT := 0;
+    END_VAR
+END_CONFIGURATION

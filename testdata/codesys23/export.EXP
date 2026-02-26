@@ -1,0 +1,51 @@
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+FUNCTION SafeInvert : INT
+VAR_INPUT
+    value : INT;
+END_VAR
+(* @END_DECLARATION := '0' *)
+IF value = -32768 THEN
+    SafeInvert := 32767;
+ELSE
+    SafeInvert := 0 - value;
+END_IF;
+END_FUNCTION
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @GLOBAL_VARIABLE_LIST := 'Globals' *)
+(* @PATH := '\/UserGlobals' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+VAR_GLOBAL
+    G_SafeInvertTest : INT := 0;
+END_VAR
+
+(* @OBJECT_END := 'Globals' *)
+(* @CONNECTIONS := Globals
+FILENAME : ''
+FILETIME : 0
+EXPORT : 0
+NUMOFCONNECTIONS : 0
+*)
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '\/UserTypes' *)
+(* @OBJECTFLAGS := '0, 8' *)
+TYPE
+    TestStruct : STRUCT
+        Value   : INT := 0;
+        IsValid : BOOL := FALSE;
+        Name    : STRING := '';
+    END_STRUCT;
+
+    TestEnum : (
+        stIdle   := 0,
+        stactive := 1,
+        stError  := 2
+    );
+END_TYPE
+(* @END_DECLARATION := '0' *)

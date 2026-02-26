@@ -1,0 +1,29 @@
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Build output
+build/
+
+# Go test binary
+*.test
+
+# Go coverage
+*.out
+*.prof
+
+# IDE / editor
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+Thumbs.db
+.DS_Store
+
+# trust-LSP cache
+.trust-lsp/
