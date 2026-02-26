@@ -27,6 +27,7 @@
 package main
 
 import (
+	"crypto/rand"
 	"flag"
 	"fmt"
 	"os"
@@ -46,7 +47,16 @@ func xmlEscape(s string) string {
 }
 
 func nowISO() string {
-	return time.Now().UTC().Format("2006-01-02T15:04:05.000")
+	return time.Now().Format("2006-01-02T15:04:05.0000000")
+}
+
+func newGUID() string {
+	b := make([]byte, 16)
+	_, _ = rand.Read(b)
+	b[6] = (b[6] & 0x0f) | 0x40 // version 4
+	b[8] = (b[8] & 0x3f) | 0x80 // variant 1
+	return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x",
+		b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
 }
 
 // ── Source classification ─────────────────────────────────────────────────────
@@ -406,6 +416,7 @@ type stObject struct {
 	decl      string // declaration part (for POUs) or full source (for DUT/GVL)
 	impl      string // implementation body (for POUs only)
 	pathParts []string
+	objectID  string // GUID for CoDeSys
 }
 
 func isPOUWithImpl(k pouKind) bool {
@@ -420,6 +431,7 @@ type dutInfo struct {
 	fields   []varInfo
 	enumVals []enumVal
 	rawDecl  string // original TYPE block text
+	objectID string // GUID for CoDeSys
 }
 
 type enumVal struct {
@@ -471,6 +483,13 @@ func parseSingleTypeBlock(lines []string) []dutInfo {
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
 		upper := strings.ToUpper(trimmed)
+
+		// Detect standalone STRUCT keyword after "TypeName :"
+		if currentName != "" && !inStruct && !inEnum && (upper == "STRUCT" || upper == "STRUCT;") {
+			inStruct = true
+			fields = nil
+			continue
+		}
 
 		// Match "TypeName : STRUCT" or "TypeName :"
 		if !inStruct && !inEnum && strings.Contains(trimmed, ":") {
@@ -645,12 +664,10 @@ func writeVarList(w *os.File, indent, tag string, vars []varInfo) {
 	fmt.Fprintf(w, "%s</%s>\n", indent, tag)
 }
 
-func writeInterfaceAsPlainText(w *os.File, indent, text string) {
+func writeObjectIdAddData(w *os.File, indent, objectID string) {
 	fmt.Fprintf(w, "%s<addData>\n", indent)
-	fmt.Fprintf(w, "%s  <data name=\"http://www.3s-software.com/plcopenxml/interfaceasplaintext\" handleUnknown=\"implementation\">\n", indent)
-	fmt.Fprintf(w, "%s    <InterfaceAsPlainText>\n", indent)
-	writeXHTMLContent(w, indent+"      ", text)
-	fmt.Fprintf(w, "%s    </InterfaceAsPlainText>\n", indent)
+	fmt.Fprintf(w, "%s  <data name=\"http://www.3s-software.com/plcopenxml/objectid\" handleUnknown=\"discard\">\n", indent)
+	fmt.Fprintf(w, "%s    <ObjectId>%s</ObjectId>\n", indent, objectID)
 	fmt.Fprintf(w, "%s  </data>\n", indent)
 	fmt.Fprintf(w, "%s</addData>\n", indent)
 }
@@ -710,8 +727,8 @@ func writePOU(w *os.File, obj *stObject) {
 	fmt.Fprintf(w, "          </ST>\n")
 	fmt.Fprintf(w, "        </body>\n")
 
-	// InterfaceAsPlainText (CoDeSys compatibility)
-	writeInterfaceAsPlainText(w, "        ", obj.decl)
+	// ObjectId (CoDeSys compatibility)
+	writeObjectIdAddData(w, "        ", obj.objectID)
 
 	fmt.Fprintf(w, "      </pou>\n")
 }
@@ -747,27 +764,28 @@ func writeDataType(w *os.File, d dutInfo) {
 		fmt.Fprintf(w, "        </baseType>\n")
 	}
 
-	// InterfaceAsPlainText for DUT
-	if d.rawDecl != "" {
-		writeInterfaceAsPlainText(w, "        ", d.rawDecl)
+	// ObjectId
+	if d.objectID != "" {
+		writeObjectIdAddData(w, "        ", d.objectID)
 	}
 
 	fmt.Fprintf(w, "      </dataType>\n")
 }
 
-func writeGlobalVars(w *os.File, obj *stObject) {
+func writeGlobalVarsAddData(w *os.File, obj *stObject) {
 	blocks := parseVarBlocks(obj.decl)
-	fmt.Fprintf(w, "          <globalVars name=\"%s\">\n", xmlEscape(obj.name))
+	fmt.Fprintf(w, "    <data name=\"http://www.3s-software.com/plcopenxml/globalvars\" handleUnknown=\"implementation\">\n")
+	fmt.Fprintf(w, "      <globalVars name=\"%s\">\n", xmlEscape(obj.name))
 	for _, b := range blocks {
 		if b.kind == "VAR_GLOBAL" {
 			for _, v := range b.vars {
-				writeVariable(w, "            ", v)
+				writeVariable(w, "        ", v)
 			}
 		}
 	}
-	// InterfaceAsPlainText
-	writeInterfaceAsPlainText(w, "            ", obj.decl)
-	fmt.Fprintf(w, "          </globalVars>\n")
+	writeObjectIdAddData(w, "        ", obj.objectID)
+	fmt.Fprintf(w, "      </globalVars>\n")
+	fmt.Fprintf(w, "    </data>\n")
 }
 
 // ── File conversion ───────────────────────────────────────────────────────────
@@ -821,7 +839,12 @@ func convertFile(stPath, srcRoot string) (*stObject, error) {
 type projFolder struct {
 	name     string
 	children map[string]*projFolder
-	objects  []string // object names
+	objects  []projObject // object names with IDs
+}
+
+type projObject struct {
+	name     string
+	objectID string
 }
 
 func newProjFolder(name string) *projFolder {
@@ -840,14 +863,14 @@ func ensureProjPath(root *projFolder, parts []string) *projFolder {
 }
 
 func writeProjStructure(w *os.File, f *projFolder, indent string) {
-	for _, key := range sortedKeys(f.children) {
-		child := f.children[key]
+	for _, name := range sortedKeys(f.children) {
+		child := f.children[name]
 		fmt.Fprintf(w, "%s<Folder Name=\"%s\">\n", indent, xmlEscape(child.name))
 		writeProjStructure(w, child, indent+"  ")
 		fmt.Fprintf(w, "%s</Folder>\n", indent)
 	}
-	for _, name := range f.objects {
-		fmt.Fprintf(w, "%s<Object Name=\"%s\" />\n", indent, xmlEscape(name))
+	for _, obj := range f.objects {
+		fmt.Fprintf(w, "%s<Object Name=\"%s\" ObjectId=\"%s\" />\n", indent, xmlEscape(obj.name), obj.objectID)
 	}
 }
 
@@ -905,9 +928,11 @@ func main() {
 			continue
 		}
 
+		obj.objectID = newGUID()
+
 		folderParts := obj.pathParts[:len(obj.pathParts)-1]
 		folder := ensureProjPath(projRoot, folderParts)
-		folder.objects = append(folder.objects, obj.name)
+		folder.objects = append(folder.objects, projObject{name: obj.name, objectID: obj.objectID})
 
 		switch obj.kind {
 		case kindGVL:
@@ -930,6 +955,7 @@ func main() {
 			if duts[i].rawDecl == "" {
 				duts[i].rawDecl = obj.rawSource
 			}
+			duts[i].objectID = newGUID()
 		}
 		allDUTs = append(allDUTs, duts...)
 	}
@@ -955,16 +981,21 @@ func main() {
 	fmt.Fprintf(w, "<project xmlns=\"http://www.plcopen.org/xml/tc6_0200\">\n")
 
 	// FileHeader
-	fmt.Fprintf(w, "  <fileHeader companyName=\"%s\" productName=\"st2plcopen\" productVersion=\"1.0\" creationDateTime=\"%s\" />\n",
+	fmt.Fprintf(w, "  <fileHeader companyName=\"%s\" productName=\"CODESYS\" productVersion=\"CODESYS V3.5 SP19 Patch 6\" creationDateTime=\"%s\" />\n",
 		xmlEscape(*company), ts)
 
-	// ContentHeader
-	fmt.Fprintf(w, "  <contentHeader name=\"%s\" modificationDateTime=\"%s\">\n", xmlEscape(*outName), ts)
+	// ContentHeader with ProjectInformation
+	fmt.Fprintf(w, "  <contentHeader name=\"%s.project\" modificationDateTime=\"%s\">\n", xmlEscape(*outName), ts)
 	fmt.Fprintf(w, "    <coordinateInfo>\n")
 	fmt.Fprintf(w, "      <fbd>\n        <scaling x=\"1\" y=\"1\" />\n      </fbd>\n")
 	fmt.Fprintf(w, "      <ld>\n        <scaling x=\"1\" y=\"1\" />\n      </ld>\n")
 	fmt.Fprintf(w, "      <sfc>\n        <scaling x=\"1\" y=\"1\" />\n      </sfc>\n")
 	fmt.Fprintf(w, "    </coordinateInfo>\n")
+	fmt.Fprintf(w, "    <addData>\n")
+	fmt.Fprintf(w, "      <data name=\"http://www.3s-software.com/plcopenxml/projectinformation\" handleUnknown=\"implementation\">\n")
+	fmt.Fprintf(w, "        <ProjectInformation />\n")
+	fmt.Fprintf(w, "      </data>\n")
+	fmt.Fprintf(w, "    </addData>\n")
 	fmt.Fprintf(w, "  </contentHeader>\n")
 
 	// Types
@@ -994,25 +1025,20 @@ func main() {
 
 	fmt.Fprintf(w, "  </types>\n")
 
-	// Instances (GVLs)
+	// Instances (CoDeSys: always empty configurations)
 	fmt.Fprintf(w, "  <instances>\n")
-	if len(gvls) > 0 {
-		fmt.Fprintf(w, "    <configurations>\n")
-		fmt.Fprintf(w, "      <configuration name=\"Config\">\n")
-		fmt.Fprintf(w, "        <resource name=\"Application\">\n")
-		for _, obj := range gvls {
-			writeGlobalVars(w, obj)
-		}
-		fmt.Fprintf(w, "        </resource>\n")
-		fmt.Fprintf(w, "      </configuration>\n")
-		fmt.Fprintf(w, "    </configurations>\n")
-	} else {
-		fmt.Fprintf(w, "    <configurations />\n")
-	}
+	fmt.Fprintf(w, "    <configurations />\n")
 	fmt.Fprintf(w, "  </instances>\n")
 
-	// ProjectStructure in addData
+	// addData: GVLs + ProjectStructure
 	fmt.Fprintf(w, "  <addData>\n")
+
+	// GVLs as addData > globalvars (CoDeSys 3.5 format)
+	for _, obj := range gvls {
+		writeGlobalVarsAddData(w, obj)
+	}
+
+	// ProjectStructure
 	fmt.Fprintf(w, "    <data name=\"http://www.3s-software.com/plcopenxml/projectstructure\" handleUnknown=\"discard\">\n")
 	fmt.Fprintf(w, "      <ProjectStructure>\n")
 	writeProjStructure(w, projRoot, "        ")

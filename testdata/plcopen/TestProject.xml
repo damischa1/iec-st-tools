@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <project xmlns="http://www.plcopen.org/xml/tc6_0200">
-  <fileHeader companyName="iec-st-tools" productName="st2plcopen" productVersion="1.0" creationDateTime="2026-02-26T14:01:45.363" />
-  <contentHeader name="TestProject" modificationDateTime="2026-02-26T14:01:45.363">
+  <fileHeader companyName="iec-st-tools" productName="CODESYS" productVersion="CODESYS V3.5 SP19 Patch 6" creationDateTime="2026-02-26T16:23:28.3873371" />
+  <contentHeader name="TestProject.project" modificationDateTime="2026-02-26T16:23:28.3873371">
     <coordinateInfo>
       <fbd>
         <scaling x="1" y="1" />
@@ -13,6 +13,11 @@
         <scaling x="1" y="1" />
       </sfc>
     </coordinateInfo>
+    <addData>
+      <data name="http://www.3s-software.com/plcopenxml/projectinformation" handleUnknown="implementation">
+        <ProjectInformation />
+      </data>
+    </addData>
   </contentHeader>
   <types>
     <dataTypes>
@@ -46,23 +51,8 @@
           </struct>
         </baseType>
         <addData>
-          <data name="http://www.3s-software.com/plcopenxml/interfaceasplaintext" handleUnknown="implementation">
-            <InterfaceAsPlainText>
-              <xhtml xmlns="http://www.w3.org/1999/xhtml">TYPE
-    TestStruct : STRUCT
-        Value   : INT := 0;
-        IsValid : BOOL := FALSE;
-        Name    : STRING := '';
-    END_STRUCT;
-
-    TestEnum : (
-        stIdle   := 0,
-        stactive := 1,
-        stError  := 2
-    );
-END_TYPE
-</xhtml>
-            </InterfaceAsPlainText>
+          <data name="http://www.3s-software.com/plcopenxml/objectid" handleUnknown="discard">
+            <ObjectId>e06568a8-6d90-4e87-9b6f-ba6827a175cc</ObjectId>
           </data>
         </addData>
       </dataType>
@@ -83,23 +73,8 @@ END_TYPE
           </enum>
         </baseType>
         <addData>
-          <data name="http://www.3s-software.com/plcopenxml/interfaceasplaintext" handleUnknown="implementation">
-            <InterfaceAsPlainText>
-              <xhtml xmlns="http://www.w3.org/1999/xhtml">TYPE
-    TestStruct : STRUCT
-        Value   : INT := 0;
-        IsValid : BOOL := FALSE;
-        Name    : STRING := '';
-    END_STRUCT;
-
-    TestEnum : (
-        stIdle   := 0,
-        stactive := 1,
-        stError  := 2
-    );
-END_TYPE
-</xhtml>
-            </InterfaceAsPlainText>
+          <data name="http://www.3s-software.com/plcopenxml/objectid" handleUnknown="discard">
+            <ObjectId>51279231-98f3-4dbd-b971-b78145709a3c</ObjectId>
           </data>
         </addData>
       </dataType>
@@ -126,63 +101,43 @@ END_IF;
           </ST>
         </body>
         <addData>
-          <data name="http://www.3s-software.com/plcopenxml/interfaceasplaintext" handleUnknown="implementation">
-            <InterfaceAsPlainText>
-              <xhtml xmlns="http://www.w3.org/1999/xhtml">// SafeInvert – merkinvaihto ilman ylivuotoa
-//
-// INT: alue -32768 .. 32767
-// SafeInvert(-32768) = 32767  (rajataan ylärajaan, koska 32768 ylivuotaisi)
-// Kaikki muut arvot: tulos = -arvo (normaali negaatio).
-
-FUNCTION SafeInvert : INT
-VAR_INPUT
-    value : INT;
-END_VAR
-</xhtml>
-            </InterfaceAsPlainText>
+          <data name="http://www.3s-software.com/plcopenxml/objectid" handleUnknown="discard">
+            <ObjectId>b3b411ba-afb7-4663-92b7-7a2d60ca3420</ObjectId>
           </data>
         </addData>
       </pou>
     </pous>
   </types>
   <instances>
-    <configurations>
-      <configuration name="Config">
-        <resource name="Application">
-          <globalVars name="Globals">
-            <variable name="G_SafeInvertTest">
-              <type>
-                <INT />
-              </type>
-              <initialValue>
-                <simpleValue value="0" />
-              </initialValue>
-            </variable>
-            <addData>
-              <data name="http://www.3s-software.com/plcopenxml/interfaceasplaintext" handleUnknown="implementation">
-                <InterfaceAsPlainText>
-                  <xhtml xmlns="http://www.w3.org/1999/xhtml">VAR_GLOBAL
-    G_SafeInvertTest : INT := 0;
-END_VAR
-</xhtml>
-                </InterfaceAsPlainText>
-              </data>
-            </addData>
-          </globalVars>
-        </resource>
-      </configuration>
-    </configurations>
+    <configurations />
   </instances>
   <addData>
+    <data name="http://www.3s-software.com/plcopenxml/globalvars" handleUnknown="implementation">
+      <globalVars name="Globals">
+        <variable name="G_SafeInvertTest">
+          <type>
+            <INT />
+          </type>
+          <initialValue>
+            <simpleValue value="0" />
+          </initialValue>
+        </variable>
+        <addData>
+          <data name="http://www.3s-software.com/plcopenxml/objectid" handleUnknown="discard">
+            <ObjectId>ae9da84c-98b5-4bf6-a15c-3b040343ac4b</ObjectId>
+          </data>
+        </addData>
+      </globalVars>
+    </data>
     <data name="http://www.3s-software.com/plcopenxml/projectstructure" handleUnknown="discard">
       <ProjectStructure>
         <Folder Name="UserGlobals">
-          <Object Name="Globals" />
+          <Object Name="Globals" ObjectId="ae9da84c-98b5-4bf6-a15c-3b040343ac4b" />
         </Folder>
         <Folder Name="UserTypes">
-          <Object Name="TestTypes" />
+          <Object Name="TestTypes" ObjectId="36f89f5e-b37e-44f3-9635-c0dfb064c066" />
         </Folder>
-        <Object Name="SafeInvert" />
+        <Object Name="SafeInvert" ObjectId="b3b411ba-afb7-4663-92b7-7a2d60ca3420" />
       </ProjectStructure>
     </data>
   </addData>
